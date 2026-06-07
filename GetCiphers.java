@@ -46,6 +46,7 @@ public final class GetCiphers {
         printRuntimeInfo(protocol, sslContext);
         printSection("Supported TLS Protocols", supported.getProtocols());
         printSection("Default TLS Protocols", defaults.getProtocols());
+        printSection("Cipher Suites For Requested Protocol", cipherSuitesForProtocol(protocol, supported.getCipherSuites()));
         printSection("Supported Cipher Suites", supported.getCipherSuites());
         printSection("Default Cipher Suites", defaults.getCipherSuites());
         printProviders();
@@ -91,6 +92,50 @@ public final class GetCiphers {
         Set<String> sortedValues = new TreeSet<String>();
         sortedValues.addAll(Arrays.asList(values));
         return sortedValues;
+    }
+
+    private static String[] cipherSuitesForProtocol(String protocol, String[] cipherSuites) {
+        /*
+         * JSSE exposes provider-wide cipher suite lists. TLS 1.3 cipher suite
+         * names are distinct from pre-TLS 1.3 names, so this derived view shows
+         * the suites that match the requested protocol family and removes SCSV
+         * signaling values that are not negotiable cipher suites.
+         */
+        Collection<String> protocolCipherSuites = new TreeSet<String>();
+        for (String cipherSuite : cipherSuites) {
+            if (isSignalingCipherSuiteValue(cipherSuite)) {
+                continue;
+            }
+
+            if ("TLSv1.3".equals(protocol)) {
+                if (isTls13CipherSuite(cipherSuite)) {
+                    protocolCipherSuites.add(cipherSuite);
+                }
+            } else if (isPreTls13Protocol(protocol)) {
+                if (!isTls13CipherSuite(cipherSuite)) {
+                    protocolCipherSuites.add(cipherSuite);
+                }
+            } else {
+                protocolCipherSuites.add(cipherSuite);
+            }
+        }
+        return protocolCipherSuites.toArray(new String[0]);
+    }
+
+    private static boolean isTls13CipherSuite(String cipherSuite) {
+        return cipherSuite.startsWith("TLS_AES_")
+                || "TLS_CHACHA20_POLY1305_SHA256".equals(cipherSuite);
+    }
+
+    private static boolean isPreTls13Protocol(String protocol) {
+        return "TLSv1.2".equals(protocol)
+                || "TLSv1.1".equals(protocol)
+                || "TLSv1".equals(protocol)
+                || "SSLv3".equals(protocol);
+    }
+
+    private static boolean isSignalingCipherSuiteValue(String cipherSuite) {
+        return cipherSuite.endsWith("_SCSV");
     }
 
     private static void printProviders() {
