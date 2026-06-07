@@ -1,4 +1,4 @@
-# getCiphers-java
+# GetCiphers-java
 
 Small dependency-free Java utility that prints the TLS protocols and cipher suites supported by the Java runtime that runs it.
 
