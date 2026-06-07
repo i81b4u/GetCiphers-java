@@ -25,6 +25,7 @@ The output includes:
 - Java runtime details
 - Supported TLS protocols
 - Default TLS protocols
+- Cipher suites for the requested protocol
 - Supported cipher suites
 - Default cipher suites
 - Installed security providers
@@ -34,6 +35,8 @@ The output includes:
 `Supported` means the Java security provider knows how to handle that protocol or cipher suite.
 
 `Default` means Java enables it for normal SSL/TLS use unless an application, JVM property, or security policy changes the settings. For most operational checks, the default lists are the most important ones.
+
+`Cipher Suites For Requested Protocol` is a derived protocol-specific view. JSSE reports provider-wide cipher suite support from `SSLContext`, so this tool filters that list by the requested protocol family and removes SCSV signaling values that are not negotiable cipher suites.
 
 It is normal for modern JDKs to list old protocols such as `SSLv3`, `TLSv1`, or `TLSv1.1` under supported protocols while not enabling them by default.
 
