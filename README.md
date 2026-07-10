@@ -55,5 +55,5 @@ This source intentionally avoids build tooling and third-party dependencies so i
 Run the dependency-free smoke test with:
 
 ```sh
-sh test.sh
+./smoketest.sh
 ```
