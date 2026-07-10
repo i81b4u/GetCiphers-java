@@ -1,4 +1,6 @@
-import java.security.GeneralSecurityException;
+import java.io.PrintStream;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
 import java.security.Provider;
 import java.security.Security;
 import java.util.Arrays;
@@ -19,7 +21,7 @@ public final class GetCiphers {
     private GetCiphers() {
     }
 
-    public static void main(String[] args) throws GeneralSecurityException {
+    public static void main(String[] args) {
         if (args.length > 1 || (args.length == 1 && isHelp(args[0]))) {
             printUsage();
             return;
@@ -27,13 +29,22 @@ public final class GetCiphers {
 
         String protocol = args.length == 1 ? args[0] : DEFAULT_PROTOCOL;
 
-        /*
-         * SSLContext is provided by JSSE. Initializing it with null arguments
-         * makes Java use the default key managers, trust managers, and source
-         * of randomness for this runtime.
-         */
-        SSLContext sslContext = SSLContext.getInstance(protocol);
-        sslContext.init(null, null, null);
+        SSLContext sslContext;
+        try {
+            /*
+             * SSLContext is provided by JSSE. Initializing it with null arguments
+             * makes Java use the default key managers, trust managers, and source
+             * of randomness for this runtime.
+             */
+            sslContext = SSLContext.getInstance(protocol);
+            sslContext.init(null, null, null);
+        } catch (NoSuchAlgorithmException e) {
+            printError("TLS protocol or context '" + protocol + "' is not available in this Java runtime.");
+            return;
+        } catch (KeyManagementException e) {
+            printError("Could not initialize TLS context '" + protocol + "'.");
+            return;
+        }
 
         /*
          * Supported values are everything the provider knows how to handle.
@@ -46,7 +57,7 @@ public final class GetCiphers {
         printRuntimeInfo(protocol, sslContext);
         printSection("Supported TLS Protocols", supported.getProtocols());
         printSection("Default TLS Protocols", defaults.getProtocols());
-        printSection("Cipher Suites For Requested Protocol", cipherSuitesForProtocol(protocol, supported.getCipherSuites()));
+        printSection("Cipher Suites For Requested Context", cipherSuitesForContext(protocol, supported.getCipherSuites()));
         printSection("Supported Cipher Suites", supported.getCipherSuites());
         printSection("Default Cipher Suites", defaults.getCipherSuites());
         printProviders();
@@ -57,12 +68,23 @@ public final class GetCiphers {
     }
 
     private static void printUsage() {
-        System.out.println("Usage: java GetCiphers [TLS_PROTOCOL]");
-        System.out.println();
-        System.out.println("Examples:");
-        System.out.println("  java GetCiphers");
-        System.out.println("  java GetCiphers TLSv1.3");
-        System.out.println("  java GetCiphers TLSv1.2");
+        printUsage(System.out);
+    }
+
+    private static void printUsage(PrintStream output) {
+        output.println("Usage: java GetCiphers [TLS_PROTOCOL]");
+        output.println();
+        output.println("Examples:");
+        output.println("  java GetCiphers");
+        output.println("  java GetCiphers TLSv1.3");
+        output.println("  java GetCiphers TLSv1.2");
+    }
+
+    private static void printError(String message) {
+        System.err.println("Error: " + message);
+        System.err.println();
+        printUsage(System.err);
+        System.exit(1);
     }
 
     private static void printRuntimeInfo(String requestedProtocol, SSLContext sslContext) {
@@ -94,12 +116,13 @@ public final class GetCiphers {
         return sortedValues;
     }
 
-    private static String[] cipherSuitesForProtocol(String protocol, String[] cipherSuites) {
+    private static String[] cipherSuitesForContext(String protocol, String[] cipherSuites) {
         /*
          * JSSE exposes provider-wide cipher suite lists. TLS 1.3 cipher suite
          * names are distinct from pre-TLS 1.3 names, so this derived view shows
-         * the suites that match the requested protocol family and removes SCSV
-         * signaling values that are not negotiable cipher suites.
+         * suites for the requested context and removes SCSV signaling values
+         * that are not negotiable cipher suites. The generic "TLS" context
+         * includes suites from both protocol families.
          */
         Collection<String> protocolCipherSuites = new TreeSet<String>();
         for (String cipherSuite : cipherSuites) {

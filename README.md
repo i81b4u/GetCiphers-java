@@ -25,7 +25,7 @@ The output includes:
 - Java runtime details
 - Supported TLS protocols
 - Default TLS protocols
-- Cipher suites for the requested protocol
+- Cipher suites for the requested context
 - Supported cipher suites
 - Default cipher suites
 - Installed security providers
@@ -36,7 +36,9 @@ The output includes:
 
 `Default` means Java enables it for normal SSL/TLS use unless an application, JVM property, or security policy changes the settings. For most operational checks, the default lists are the most important ones.
 
-`Cipher Suites For Requested Protocol` is a derived protocol-specific view. JSSE reports provider-wide cipher suite support from `SSLContext`, so this tool filters that list by the requested protocol family and removes SCSV signaling values that are not negotiable cipher suites.
+`Cipher Suites For Requested Context` is a derived view. JSSE reports provider-wide cipher suite support from `SSLContext`, so this tool filters the list for a specific protocol version and removes SCSV signaling values that are not negotiable cipher suites. When the default `TLS` context is requested, the section includes suites from both the TLS 1.3 and pre-TLS 1.3 families.
+
+If the requested protocol or context is unavailable in the selected Java runtime, the tool prints an error and usage information to standard error and exits with status 1.
 
 It is normal for modern JDKs to list old protocols such as `SSLv3`, `TLSv1`, or `TLSv1.1` under supported protocols while not enabling them by default.
 
@@ -47,3 +49,11 @@ The security provider list helps explain platform differences. For example, Wind
 Older one-liners using `jrunscript` are no longer reliable because `jrunscript` was deprecated in Java 9 and removed in later JDK releases.
 
 This source intentionally avoids build tooling and third-party dependencies so it can be copied or run directly on the Java runtime being inspected.
+
+## Smoke test
+
+Run the dependency-free smoke test with:
+
+```sh
+sh test.sh
+```
