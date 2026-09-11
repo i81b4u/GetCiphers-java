@@ -1,4 +1,5 @@
 import java.io.PrintStream;
+import java.lang.reflect.InvocationTargetException;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.Provider;
@@ -12,7 +13,7 @@ import javax.net.ssl.SSLParameters;
 
 public final class GetCiphers {
     /*
-     * "TLS" asks JSSE for the runtime's default TLS context. On modern JDKs
+     * "TLS" asks JSSE for a general-purpose TLS context. On modern JDKs
      * that context can still report old protocols as supported, while only
      * enabling secure current protocols by default.
      */
@@ -22,7 +23,11 @@ public final class GetCiphers {
     }
 
     public static void main(String[] args) {
-        if (args.length > 1 || (args.length == 1 && isHelp(args[0]))) {
+        if (args.length > 1) {
+            printError("Expected at most one TLS protocol or context argument.");
+            return;
+        }
+        if (args.length == 1 && isHelp(args[0])) {
             printUsage();
             return;
         }
@@ -57,9 +62,11 @@ public final class GetCiphers {
         printRuntimeInfo(protocol, sslContext);
         printSection("Supported TLS Protocols", supported.getProtocols());
         printSection("Default TLS Protocols", defaults.getProtocols());
-        printSection("Cipher Suites For Requested Context", cipherSuitesForContext(protocol, supported.getCipherSuites()));
+        printNamedGroups("Supported TLS Named Groups", supported, System.out);
+        printNamedGroups("Default TLS Named Groups", defaults, System.out);
         printSection("Supported Cipher Suites", supported.getCipherSuites());
         printSection("Default Cipher Suites", defaults.getCipherSuites());
+        printSection("Supported KEMs (algorithm @ provider)", supportedKems(Security.getProviders()));
         printProviders();
     }
 
@@ -99,8 +106,9 @@ public final class GetCiphers {
     }
 
     private static void printSection(String title, String[] values) {
-        System.out.println(title + " (" + values.length + ")");
-        for (String value : sorted(values)) {
+        Collection<String> sortedValues = sorted(values);
+        System.out.println(title + " (" + sortedValues.size() + ")");
+        for (String value : sortedValues) {
             System.out.println("  " + value);
         }
         System.out.println();
@@ -116,49 +124,46 @@ public final class GetCiphers {
         return sortedValues;
     }
 
-    private static String[] cipherSuitesForContext(String protocol, String[] cipherSuites) {
-        /*
-         * JSSE exposes provider-wide cipher suite lists. TLS 1.3 cipher suite
-         * names are distinct from pre-TLS 1.3 names, so this derived view shows
-         * suites for the requested context and removes SCSV signaling values
-         * that are not negotiable cipher suites. The generic "TLS" context
-         * includes suites from both protocol families.
-         */
-        Collection<String> protocolCipherSuites = new TreeSet<String>();
-        for (String cipherSuite : cipherSuites) {
-            if (isSignalingCipherSuiteValue(cipherSuite)) {
-                continue;
-            }
-
-            if ("TLSv1.3".equals(protocol)) {
-                if (isTls13CipherSuite(cipherSuite)) {
-                    protocolCipherSuites.add(cipherSuite);
-                }
-            } else if (isPreTls13Protocol(protocol)) {
-                if (!isTls13CipherSuite(cipherSuite)) {
-                    protocolCipherSuites.add(cipherSuite);
-                }
+    static void printNamedGroups(String title, SSLParameters parameters, PrintStream output) {
+        // Reflection keeps compilation and execution compatible with Java 8.
+        // Preserve the provider's preference order instead of sorting these lists.
+        try {
+            String[] groups = (String[]) SSLParameters.class.getMethod("getNamedGroups").invoke(parameters);
+            if (groups == null) {
+                output.println(title);
+                output.println("  Not reported by this provider; provider defaults apply.");
             } else {
-                protocolCipherSuites.add(cipherSuite);
+                output.println(title + " (" + groups.length + ")");
+                for (String group : groups) {
+                    output.println("  " + group);
+                }
+            }
+        } catch (NoSuchMethodException e) {
+            output.println(title);
+            output.println("  Unavailable: this Java runtime lacks SSLParameters.getNamedGroups() (Java 20+).");
+        } catch (IllegalAccessException e) {
+            output.println(title);
+            output.println("  Unavailable: cannot access SSLParameters.getNamedGroups().");
+        } catch (InvocationTargetException e) {
+            output.println(title);
+            output.println("  Unavailable: provider could not report named groups ("
+                    + e.getCause().getClass().getSimpleName() + ").");
+        }
+        output.println();
+    }
+
+    static String[] supportedKems(Provider[] providers) {
+        // Inspect registrations without linking to javax.crypto.KEM (Java 21+).
+        // These are JCA services, not TLS named groups or handshake guarantees.
+        Set<String> kems = new TreeSet<String>();
+        for (Provider provider : providers) {
+            for (Provider.Service service : provider.getServices()) {
+                if ("KEM".equalsIgnoreCase(service.getType())) {
+                    kems.add(service.getAlgorithm() + " @ " + provider.getName());
+                }
             }
         }
-        return protocolCipherSuites.toArray(new String[0]);
-    }
-
-    private static boolean isTls13CipherSuite(String cipherSuite) {
-        return cipherSuite.startsWith("TLS_AES_")
-                || "TLS_CHACHA20_POLY1305_SHA256".equals(cipherSuite);
-    }
-
-    private static boolean isPreTls13Protocol(String protocol) {
-        return "TLSv1.2".equals(protocol)
-                || "TLSv1.1".equals(protocol)
-                || "TLSv1".equals(protocol)
-                || "SSLv3".equals(protocol);
-    }
-
-    private static boolean isSignalingCipherSuiteValue(String cipherSuite) {
-        return cipherSuite.endsWith("_SCSV");
+        return kems.toArray(new String[0]);
     }
 
     private static void printProviders() {
