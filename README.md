@@ -13,12 +13,6 @@ javac GetCiphers.java
 java GetCiphers
 ```
 
-For example, to inspect a Java 27 installation in a sibling directory, run the source directly with that runtime:
-
-```sh
-../jdk-27/bin/java GetCiphers.java
-```
-
 By default the tool uses `SSLContext.getInstance("TLS")`. You can pass a specific TLS protocol if you want to inspect that context:
 
 ```sh
